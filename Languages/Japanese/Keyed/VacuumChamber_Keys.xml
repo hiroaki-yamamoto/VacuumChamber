@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <!-- Gizmos -->
+  <VC_SetVacuumLevel_Label>目標真空度: {0}%</VC_SetVacuumLevel_Label>
+  <VC_SetVacuumLevel_Desc>目標の真空度 (0%〜100%) を設定するダイアログを開きます。現在の真空度が目標未満のときは減圧し、目標を上回るときは与圧します。</VC_SetVacuumLevel_Desc>
+  <VC_SetPumpingSpeed_Label>排気速度: Lv {0}</VC_SetPumpingSpeed_Label>
+  <VC_SetPressurizationSpeed_Label>与圧速度: Lv {0}</VC_SetPressurizationSpeed_Label>
+  <VC_SetPumpingSpeed_Desc>排気速度レベル (1〜50) を設定するダイアログを開きます。現在の真空度が目標真空度を上回る場合は与圧速度レベルとして機能します。レベル1ごとに速度 100 m³/h、消費電力 250 W が加算されます。</VC_SetPumpingSpeed_Desc>
+
+  <!-- Dialog -->
+  <VC_Dialog_TargetVacuumTitle>目標真空度の設定</VC_Dialog_TargetVacuumTitle>
+  <VC_Dialog_PumpingSpeedTitle>排気速度レベルの設定</VC_Dialog_PumpingSpeedTitle>
+  <VC_Dialog_PressurizationSpeedTitle>与圧速度レベルの設定</VC_Dialog_PressurizationSpeedTitle>
+  <VC_Dialog_TargetSummary>目標の室内真空度: {0}%</VC_Dialog_TargetSummary>
+  <VC_Dialog_SpeedSummary>速度: {0} m³/h ({1} W)</VC_Dialog_SpeedSummary>
+  <VC_Dialog_Confirm>決定</VC_Dialog_Confirm>
+  <VC_Dialog_Cancel>キャンセル</VC_Dialog_Cancel>
+
+  <!-- Inspect Pane -->
+  <VC_State_Operational>状態: 稼働中</VC_State_Operational>
+  <VC_State_Unpowered>状態: 電力未供給</VC_State_Unpowered>
+  <VC_State_Inoperable>状態: 稼働不能 (屋外または未密閉)</VC_State_Inoperable>
+  <VC_Inspect_TargetVacuum>目標真空度: {0}%</VC_Inspect_TargetVacuum>
+  <VC_Inspect_RoomVacuum>室内真空度: {0}% ({1} m³)</VC_Inspect_RoomVacuum>
+  <VC_Inspect_RoomVacuumOutdoors>室内真空度: 0.0% (未密閉)</VC_Inspect_RoomVacuumOutdoors>
+  <VC_Inspect_PumpingSpeed>排気速度: Lv {0} ({1} m³/h, {2} W)</VC_Inspect_PumpingSpeed>
+  <VC_Inspect_PressurizationSpeed>与圧速度: Lv {0} ({1} m³/h, {2} W)</VC_Inspect_PressurizationSpeed>
+
+  <!-- Placement -->
+  <VC_CannotPlaceOnWater>真空チャンバーは水上には設置できません。</VC_CannotPlaceOnWater>
+  <VC_MustPlaceIndoors>屋根のある密閉された屋内にのみ設置できます。</VC_MustPlaceIndoors>
+
+</LanguageData>

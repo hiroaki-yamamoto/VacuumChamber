@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <VC_VacuumChamber.label>真空チャンバー</VC_VacuumChamber.label>
+  <VC_VacuumChamber.description>密閉された屋内の空気を排出または供給し、設定した目標真空度を維持するコンパクトな先進技術設備です。現在の真空度が目標未満のときは減圧し、目標を上回るときは与圧します。屋内への設置と電力供給が必要で、壁や屋根が破損して屋外扱いになると稼働を停止し、修復されると自動的に再開します。\n\n排気・与圧速度レベル1につき速度が100 m³/h増加し、消費電力は250 Wずつ上昇します。</VC_VacuumChamber.description>
+
+</LanguageData>

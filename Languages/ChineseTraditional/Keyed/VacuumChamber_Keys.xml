@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <!-- Gizmos -->
+  <VC_SetVacuumLevel_Label>目標真空度: {0}%</VC_SetVacuumLevel_Label>
+  <VC_SetVacuumLevel_Desc>開啟視窗以設定此裝置的目標真空度 (0% 至 100%)。低於目標時進行減壓，高於目標時進行加壓。</VC_SetVacuumLevel_Desc>
+  <VC_SetPumpingSpeed_Label>抽氣速度: Lv {0}</VC_SetPumpingSpeed_Label>
+  <VC_SetPressurizationSpeed_Label>加壓速度: Lv {0}</VC_SetPressurizationSpeed_Label>
+  <VC_SetPumpingSpeed_Desc>開啟視窗以設定抽氣速度等級 (1 至 50)；當目前真空度高於目標值時，此等級將作為加壓速度等級使用。每級增加 100 m³/h 速率並消耗 250 W 電力。</VC_SetPumpingSpeed_Desc>
+
+  <!-- Dialog -->
+  <VC_Dialog_TargetVacuumTitle>設定目標真空度</VC_Dialog_TargetVacuumTitle>
+  <VC_Dialog_PumpingSpeedTitle>設定抽氣速度等級</VC_Dialog_PumpingSpeedTitle>
+  <VC_Dialog_PressurizationSpeedTitle>設定加壓速度等級</VC_Dialog_PressurizationSpeedTitle>
+  <VC_Dialog_TargetSummary>目標室內真空度: {0}%</VC_Dialog_TargetSummary>
+  <VC_Dialog_SpeedSummary>速率: {0} m³/h ({1} W)</VC_Dialog_SpeedSummary>
+  <VC_Dialog_Confirm>確認</VC_Dialog_Confirm>
+  <VC_Dialog_Cancel>取消</VC_Dialog_Cancel>
+
+  <!-- Inspect Pane -->
+  <VC_State_Operational>狀態: 運作中</VC_State_Operational>
+  <VC_State_Unpowered>狀態: 未供電</VC_State_Unpowered>
+  <VC_State_Inoperable>狀態: 無法運作 (室外或未密閉)</VC_State_Inoperable>
+  <VC_Inspect_TargetVacuum>目標真空度: {0}%</VC_Inspect_TargetVacuum>
+  <VC_Inspect_RoomVacuum>室內真空度: {0}% ({1} m³)</VC_Inspect_RoomVacuum>
+  <VC_Inspect_RoomVacuumOutdoors>室內真空度: 0.0% (未密閉)</VC_Inspect_RoomVacuumOutdoors>
+  <VC_Inspect_PumpingSpeed>抽氣速度: Lv {0} ({1} m³/h, {2} W)</VC_Inspect_PumpingSpeed>
+  <VC_Inspect_PressurizationSpeed>加壓速度: Lv {0} ({1} m³/h, {2} W)</VC_Inspect_PressurizationSpeed>
+
+  <!-- Placement -->
+  <VC_CannotPlaceOnWater>無法將真空室裝置建造於水面上。</VC_CannotPlaceOnWater>
+  <VC_MustPlaceIndoors>必須建造於有屋頂且密閉的室內空間。</VC_MustPlaceIndoors>
+
+</LanguageData>

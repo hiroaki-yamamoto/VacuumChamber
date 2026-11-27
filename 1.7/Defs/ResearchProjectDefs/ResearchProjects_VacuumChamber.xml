@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <ResearchProjectDef>
+    <defName>VC_VacuumChamber</defName>
+    <label>vacuum chamber</label>
+    <description>Construct high-capacity spacer-tier vacuum chamber units capable of evacuating or pressurizing sealed rooms to maintain a controlled partial or full vacuum.</description>
+    <baseCost>2000</baseCost>
+    <techLevel>Spacer</techLevel>
+    <prerequisites>
+      <li>AirConditioning</li>
+    </prerequisites>
+    <requiredResearchBuilding>HiTechResearchBench</requiredResearchBuilding>
+    <requiredResearchFacilities>
+      <li>MultiAnalyzer</li>
+    </requiredResearchFacilities>
+    <researchViewX>16.00</researchViewX>
+    <researchViewY>2.40</researchViewY>
+  </ResearchProjectDef>
+
+</Defs>

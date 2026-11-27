@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <VC_VacuumChamber.label>真空室裝置</VC_VacuumChamber.label>
+  <VC_VacuumChamber.description>緊湊型的太空時代氣壓調節設備，能對密閉室內空間進行抽氣減壓或加壓以維持設定的目標真空度。當目前真空度低於目標時進行減壓，高於目標時進行加壓。必須安裝於室內並接通電力；若牆壁或屋頂受損導致不再密閉，運作將暫停，並在重新密封後自動恢復。\n\n每級速度提供 100 m³/h 的抽氣／加壓速率並消耗 250 W 電力。</VC_VacuumChamber.description>
+
+</LanguageData>

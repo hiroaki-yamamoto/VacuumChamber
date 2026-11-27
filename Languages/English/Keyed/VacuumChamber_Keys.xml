@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <!-- Gizmos -->
+  <VC_SetVacuumLevel_Label>Target vacuum: {0}%</VC_SetVacuumLevel_Label>
+  <VC_SetVacuumLevel_Desc>Open a dialog to set the target vacuum level (0% to 100%) for this chamber. Depressurizes when current vacuum is below the target, and pressurizes when above it.</VC_SetVacuumLevel_Desc>
+  <VC_SetPumpingSpeed_Label>Pumping speed: Lv {0}</VC_SetPumpingSpeed_Label>
+  <VC_SetPressurizationSpeed_Label>Pressurization speed: Lv {0}</VC_SetPressurizationSpeed_Label>
+  <VC_SetPumpingSpeed_Desc>Open a dialog to set the pumping speed level (1 to 50), which serves as the pressurization speed level when current vacuum exceeds the target. Each level adds 100 m³/h flow rate and consumes 250 W.</VC_SetPumpingSpeed_Desc>
+
+  <!-- Dialog -->
+  <VC_Dialog_TargetVacuumTitle>Set Target Vacuum Level</VC_Dialog_TargetVacuumTitle>
+  <VC_Dialog_PumpingSpeedTitle>Set Pumping Speed Level</VC_Dialog_PumpingSpeedTitle>
+  <VC_Dialog_PressurizationSpeedTitle>Set Pressurization Speed Level</VC_Dialog_PressurizationSpeedTitle>
+  <VC_Dialog_TargetSummary>Target room vacuum: {0}%</VC_Dialog_TargetSummary>
+  <VC_Dialog_SpeedSummary>Rate: {0} m³/h ({1} W)</VC_Dialog_SpeedSummary>
+  <VC_Dialog_Confirm>Confirm</VC_Dialog_Confirm>
+  <VC_Dialog_Cancel>Cancel</VC_Dialog_Cancel>
+
+  <!-- Inspect Pane -->
+  <VC_State_Operational>State: Operational</VC_State_Operational>
+  <VC_State_Unpowered>State: Unpowered</VC_State_Unpowered>
+  <VC_State_Inoperable>State: Inoperable (outdoors or unsealed)</VC_State_Inoperable>
+  <VC_Inspect_TargetVacuum>Target vacuum: {0}%</VC_Inspect_TargetVacuum>
+  <VC_Inspect_RoomVacuum>Room vacuum: {0}% ({1} m³)</VC_Inspect_RoomVacuum>
+  <VC_Inspect_RoomVacuumOutdoors>Room vacuum: 0.0% (unsealed)</VC_Inspect_RoomVacuumOutdoors>
+  <VC_Inspect_PumpingSpeed>Pumping speed: Lv {0} ({1} m³/h, {2} W)</VC_Inspect_PumpingSpeed>
+  <VC_Inspect_PressurizationSpeed>Pressurization speed: Lv {0} ({1} m³/h, {2} W)</VC_Inspect_PressurizationSpeed>
+
+  <!-- Placement -->
+  <VC_CannotPlaceOnWater>Cannot place a vacuum chamber on water.</VC_CannotPlaceOnWater>
+  <VC_MustPlaceIndoors>Must be placed inside a roofed, enclosed indoor room.</VC_MustPlaceIndoors>
+
+</LanguageData>

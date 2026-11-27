@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>Vacuum Chamber</name>
+  <authors>
+    <li>Hiroaki Yamamoto</li>
+    <li>Gemini</li>
+  </authors>
+  <packageId>hiroakiyamamoto.VacuumChamber</packageId>
+  <supportedVersions>
+    <li>1.7</li>
+  </supportedVersions>
+  <description>Adds a Spacer-tier, rotatable Vacuum Chamber building capable of depressurizing and pressurizing enclosed indoor rooms to maintain partial or full vacuum using ISO 3529 vacuum technology physics.
+
+Features:
+- Adjust target vacuum (0% to 100%) and pumping/pressurization speed level (1 to 50, at 100 m³/h and 250 W per level).
+- Depressurizes when current vacuum is below target, and pressurizes when current vacuum exceeds target.
+- Operates on both orbital/space maps and sealed planetary rooms.
+- Automatic state transitions between Unpowered, Operational, and Inoperable (outdoors/unsealed) with automatic recovery once repaired.</description>
+  <modDependencies>
+    <li>
+      <packageId>Ludeon.RimWorld.Odyssey</packageId>
+      <displayName>Odyssey</displayName>
+    </li>
+    <li>
+      <packageId>brrainz.harmony</packageId>
+      <displayName>Harmony</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+      <downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
+    </li>
+  </modDependencies>
+  <loadAfter>
+    <li>Ludeon.RimWorld.Odyssey</li>
+    <li>brrainz.harmony</li>
+  </loadAfter>
+</ModMetaData>

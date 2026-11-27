@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="VacuumChamber/VacuumChamber.csproj">
+    <BuildType Project="Release" />
+  </Project>
+  <Project Path="VacuumChamber.Tests/VacuumChamber.Tests.csproj" />
+</Solution>

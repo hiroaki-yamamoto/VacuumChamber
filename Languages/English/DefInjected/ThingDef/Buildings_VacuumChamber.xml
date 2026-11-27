@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <VC_VacuumChamber.label>vacuum chamber</VC_VacuumChamber.label>
+  <VC_VacuumChamber.description>A compact spacer-tier pressure control unit that evacuates or pressurizes a sealed indoor room to maintain the target vacuum level. Depressurizes when current vacuum is below the target and pressurizes when above it. Must be placed indoors and supplied with electrical power; if the room is breached or unroofed, operation halts until the enclosure is sealed again.\n\nPower draw scales at 250 W per speed level (100 m³/h pumping or pressurization rate per level).</VC_VacuumChamber.description>
+
+</LanguageData>

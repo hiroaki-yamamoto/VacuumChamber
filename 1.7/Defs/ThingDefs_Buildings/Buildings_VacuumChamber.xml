@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <ThingDef ParentName="BuildingBase">
+    <defName>VC_VacuumChamber</defName>
+    <thingClass>VacuumChamber.Building_VacuumChamber</thingClass>
+    <label>vacuum chamber</label>
+    <description>A compact spacer-tier pressure control unit that evacuates or pressurizes a sealed indoor room to maintain the target vacuum level. Depressurizes when current vacuum is below the target and pressurizes when above it. Must be placed indoors and supplied with electrical power; if the room is breached or unroofed, operation halts until the enclosure is sealed again.\n\nPower draw scales at 250 W per speed level (100 m³/h pumping or pressurization rate per level).</description>
+    <size>(1,1)</size>
+    <rotatable>true</rotatable>
+    <defaultPlacingRot>South</defaultPlacingRot>
+    <tickerType>Rare</tickerType>
+    <drawerType>MapMeshOnly</drawerType>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>PassThroughOnly</passability>
+    <pathCost>40</pathCost>
+    <fillPercent>0.5</fillPercent>
+    <castEdgeShadows>false</castEdgeShadows>
+    <minifiedDef>MinifiedThing</minifiedDef>
+    <thingCategories>
+      <li>BuildingsMisc</li>
+    </thingCategories>
+    <designationCategory>Odyssey</designationCategory>
+    <uiOrder>2510</uiOrder>
+    <researchPrerequisites>
+      <li>VC_VacuumChamber</li>
+    </researchPrerequisites>
+    <constructionSkillPrerequisite>6</constructionSkillPrerequisite>
+    <uiIconPath>Things/Building/VacuumChamber/VacuumChamber_MenuIcon</uiIconPath>
+    <graphicData>
+      <texPath>Things/Building/VacuumChamber/Unpowered/VacuumChamber_Unpowered</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <shaderType>CutoutComplex</shaderType>
+      <drawSize>(1,1)</drawSize>
+      <damageData>
+        <enabled>false</enabled>
+      </damageData>
+    </graphicData>
+    <statBases>
+      <MaxHitPoints>150</MaxHitPoints>
+      <WorkToBuild>3500</WorkToBuild>
+      <Mass>25</Mass>
+      <Flammability>0.2</Flammability>
+      <Beauty>-4</Beauty>
+    </statBases>
+    <stuffCategories>
+      <li>Metallic</li>
+    </stuffCategories>
+    <costStuffCount>60</costStuffCount>
+    <costList>
+      <ComponentIndustrial>3</ComponentIndustrial>
+      <ComponentSpacer>1</ComponentSpacer>
+    </costList>
+    <terrainAffordanceNeeded IsNull="True" />
+    <useStuffTerrainAffordance>false</useStuffTerrainAffordance>
+    <building>
+      <destroySound>BuildingDestroyed_Metal_Small</destroySound>
+    </building>
+    <placeWorkers>
+      <li>VacuumChamber.PlaceWorker_VacuumChamber</li>
+    </placeWorkers>
+    <comps>
+      <li Class="CompProperties_Power">
+        <compClass>CompPowerTrader</compClass>
+        <basePowerConsumption>250</basePowerConsumption>
+        <shortCircuitInRain>true</shortCircuitInRain>
+      </li>
+      <li Class="CompProperties_Flickable" />
+      <li Class="CompProperties_Breakdownable" />
+      <li Class="VacuumChamber.CompProperties_VacuumChamber">
+        <ceilingHeightMeters>2.5</ceilingHeightMeters>
+        <pumpingSpeedPerLevel>100</pumpingSpeedPerLevel>
+        <powerPerSpeedLevel>250</powerPerSpeedLevel>
+        <maxPumpingSpeedLevel>50</maxPumpingSpeedLevel>
+        <defaultPumpingSpeedLevel>1</defaultPumpingSpeedLevel>
+        <defaultTargetVacuum>0</defaultTargetVacuum>
+        <unpoweredTexPath>Things/Building/VacuumChamber/Unpowered/VacuumChamber_Unpowered</unpoweredTexPath>
+        <operationalTexPath>Things/Building/VacuumChamber/Operational/VacuumChamber_Operational</operationalTexPath>
+        <inoperableTexPath>Things/Building/VacuumChamber/Inoperable/VacuumChamber_Inoperable</inoperableTexPath>
+      </li>
+    </comps>
+  </ThingDef>
+
+</Defs>
