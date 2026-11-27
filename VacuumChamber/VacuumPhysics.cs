@@ -1,5 +1,3 @@
-using System;
-
 namespace VacuumChamber
 {
   /// <summary>
@@ -40,18 +38,14 @@ namespace VacuumChamber
     /// </summary>
     /// <param name="roomCellCount">Number of 1x1 m² tiles in the room.</param>
     /// <param name="ceilingHeightMeters">Ceiling height in meters (defaults to 2.5 m).</param>
-    /// <returns>Volume in m³, or <c>0.0</c> if inputs are non-positive.</returns>
-    /// <example>
-    /// <code>
-    /// double volume = VacuumPhysics.ComputeRoomVolumeM3(20);
-    /// // volume == 50.0
-    /// </code>
-    /// </example>
+    /// <returns>Volume in m³, or <c>0.0</c> if inputs are non-positive or non-finite.</returns>
     public static double ComputeRoomVolumeM3(
       int roomCellCount,
       double ceilingHeightMeters = DefaultCeilingHeightMeters)
     {
-      if (roomCellCount <= 0 || ceilingHeightMeters <= 0.0)
+      if (roomCellCount <= 0
+        || !double.IsFinite(ceilingHeightMeters)
+        || ceilingHeightMeters <= 0.0)
       {
         return 0.0;
       }
@@ -65,18 +59,14 @@ namespace VacuumChamber
     /// </summary>
     /// <param name="pumpingSpeedLevel">Speed level in [1, 50] (pumping / pressurization speed level).</param>
     /// <param name="speedPerLevel">Speed per level in m³/h (defaults to 100).</param>
-    /// <returns>Volumetric flow rate in m³/h, or <c>0.0</c> if inputs are non-positive.</returns>
-    /// <example>
-    /// <code>
-    /// double speed = VacuumPhysics.ComputePumpingSpeedM3PerHour(5);
-    /// // speed == 500.0
-    /// </code>
-    /// </example>
+    /// <returns>Volumetric flow rate in m³/h, or <c>0.0</c> if inputs are non-positive or non-finite.</returns>
     public static double ComputePumpingSpeedM3PerHour(
       int pumpingSpeedLevel,
       double speedPerLevel = DefaultPumpingSpeedPerLevel)
     {
-      if (pumpingSpeedLevel <= 0 || speedPerLevel <= 0.0)
+      if (pumpingSpeedLevel <= 0
+        || !double.IsFinite(speedPerLevel)
+        || speedPerLevel <= 0.0)
       {
         return 0.0;
       }
@@ -89,18 +79,14 @@ namespace VacuumChamber
     /// </summary>
     /// <param name="pumpingSpeedLevel">Speed level in [1, 50] (pumping / pressurization speed level).</param>
     /// <param name="powerPerLevel">Power per level in watts (defaults to 250).</param>
-    /// <returns>Positive watt magnitude, or <c>0f</c> if inputs are non-positive.</returns>
-    /// <example>
-    /// <code>
-    /// float watts = VacuumPhysics.ComputePowerDrawWatts(2);
-    /// // watts == 500f
-    /// </code>
-    /// </example>
+    /// <returns>Positive watt magnitude, or <c>0f</c> if inputs are non-positive or non-finite.</returns>
     public static float ComputePowerDrawWatts(
       int pumpingSpeedLevel,
       double powerPerLevel = DefaultPowerPerSpeedLevel)
     {
-      if (pumpingSpeedLevel <= 0 || powerPerLevel <= 0.0)
+      if (pumpingSpeedLevel <= 0
+        || !double.IsFinite(powerPerLevel)
+        || powerPerLevel <= 0.0)
       {
         return 0f;
       }
@@ -133,18 +119,45 @@ namespace VacuumChamber
     }
 
     /// <summary>
+    /// Parses an integer from <paramref name="text"/>, falling back to <paramref name="fallbackValue"/>
+    /// on parse failure, and clamps the result to [<paramref name="minValue"/>, <paramref name="maxValue"/>].
+    /// </summary>
+    /// <param name="text">Candidate numeric text.</param>
+    /// <param name="fallbackValue">Fallback value used when parsing fails.</param>
+    /// <param name="minValue">Inclusive lower bound.</param>
+    /// <param name="maxValue">Inclusive upper bound.</param>
+    /// <returns>Parsed or fallback integer clamped to the valid range.</returns>
+    public static int ParseClampedInt(
+      string? text,
+      int fallbackValue,
+      int minValue,
+      int maxValue)
+    {
+      int effectiveMax = Math.Max(minValue, maxValue);
+      int candidate = int.TryParse(text, out int parsed) ? parsed : fallbackValue;
+      return Math.Clamp(candidate, minValue, effectiveMax);
+    }
+
+    /// <summary>
+    /// Determines whether the chamber should operate in pressurization mode
+    /// (current room vacuum exceeds the configured target vacuum).
+    /// </summary>
+    /// <param name="currentVacuum">Current room vacuum fraction in [0, 1].</param>
+    /// <param name="targetVacuum">Target vacuum fraction in [0, 1].</param>
+    /// <returns><c>true</c> if both values are finite and <paramref name="currentVacuum"/> &gt; <paramref name="targetVacuum"/>.</returns>
+    public static bool IsPressurizing(float currentVacuum, float targetVacuum)
+    {
+      return float.IsFinite(currentVacuum)
+        && float.IsFinite(targetVacuum)
+        && currentVacuum > targetVacuum;
+    }
+
+    /// <summary>
     /// Evaluates the chamber operating state enforcing <c>Unpowered &gt; Inoperable &gt; Operational</c>.
     /// </summary>
     /// <param name="isPowered">Whether the chamber is receiving power and operational on the grid.</param>
     /// <param name="isRoomSealedIndoors">Whether the containing room is roofed and sealed indoors.</param>
     /// <returns>The active <see cref="ChamberState"/>.</returns>
-    /// <example>
-    /// <code>
-    /// ChamberState s1 = VacuumPhysics.EvaluateState(false, false); // ChamberState.Unpowered
-    /// ChamberState s2 = VacuumPhysics.EvaluateState(true, false);  // ChamberState.Inoperable
-    /// ChamberState s3 = VacuumPhysics.EvaluateState(true, true);   // ChamberState.Operational
-    /// </code>
-    /// </example>
     public static ChamberState EvaluateState(bool isPowered, bool isRoomSealedIndoors)
     {
       if (!isPowered)
@@ -186,14 +199,6 @@ namespace VacuumChamber
     /// <param name="ceilingHeightMeters">Ceiling height in meters (defaults to 2.5 m).</param>
     /// <param name="speedPerLevel">Volumetric flow rate per level in m³/h (defaults to 100 m³/h).</param>
     /// <returns>Updated vacuum fraction clamped to <paramref name="targetVacuum"/>.</returns>
-    /// <example>
-    /// <code>
-    /// // Depressurize: 20 tiles (V = 50 m³), Lv 1 (S = 100 m³/h), dt = 0.1 h -> 1 - exp(-0.2) ≈ 0.18126925
-    /// float depressurized = VacuumPhysics.ComputeNextVacuum(0f, 1f, 20, 1);
-    /// // Pressurize: 20 tiles (V = 50 m³), Lv 1 (S = 100 m³/h), dt = 0.1 h -> 1 * exp(-0.2) ≈ 0.81873075
-    /// float pressurized = VacuumPhysics.ComputeNextVacuum(1f, 0f, 20, 1);
-    /// </code>
-    /// </example>
     public static float ComputeNextVacuum(
       float currentVacuum,
       float targetVacuum,
@@ -203,14 +208,22 @@ namespace VacuumChamber
       float ceilingHeightMeters = (float)DefaultCeilingHeightMeters,
       float speedPerLevel = (float)DefaultPumpingSpeedPerLevel)
     {
+      if (!float.IsFinite(currentVacuum) || !float.IsFinite(targetVacuum))
+      {
+        return float.IsFinite(currentVacuum) ? Math.Clamp(currentVacuum, 0f, 1f) : 0f;
+      }
+
       float clampedTarget = Math.Clamp(targetVacuum, 0f, 1f);
       double clampedCurrent = Math.Clamp((double)currentVacuum, 0.0, 1.0);
       if (roomCellCount <= 0
         || pumpingSpeedLevel <= 0
+        || !float.IsFinite(deltaHours)
         || deltaHours <= 0f
+        || !float.IsFinite(ceilingHeightMeters)
         || ceilingHeightMeters <= 0f
+        || !float.IsFinite(speedPerLevel)
         || speedPerLevel <= 0f
-        || Math.Abs(clampedCurrent - clampedTarget) <= 0.0)
+        || clampedCurrent == clampedTarget)
       {
         return currentVacuum;
       }

@@ -1,4 +1,3 @@
-using System;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -12,6 +11,20 @@ namespace VacuumChamber
   /// </summary>
   public class Dialog_ChamberValue : Window
   {
+    private const float WindowWidth = 360f;
+    private const float WindowHeight = 196f;
+    private const float TitleHeight = 32f;
+    private const float SummaryOffsetY = 34f;
+    private const float SummaryHeight = 24f;
+    private const float InputRowOffsetY = 68f;
+    private const float RowHeight = 34f;
+    private const float StepButtonWidth = 44f;
+    private const float ControlGap = 8f;
+    private const float UnitLabelWidth = 32f;
+    private const float UnitLabelPadding = 4f;
+    private const float FooterButtonWidth = 110f;
+
+    private readonly object syncLock = new object();
     private readonly string title;
     private readonly int minValue;
     private readonly int maxValue;
@@ -24,7 +37,7 @@ namespace VacuumChamber
     private string editBuffer;
 
     /// <inheritdoc />
-    public override Vector2 InitialSize => new Vector2(360f, 196f);
+    public override Vector2 InitialSize => new Vector2(WindowWidth, WindowHeight);
 
     /// <summary>
     /// Initializes a new <see cref="Dialog_ChamberValue"/> modal window that pauses the simulation while open.
@@ -47,7 +60,7 @@ namespace VacuumChamber
       Func<int, string>? summaryFormatter,
       Action<int> onConfirm)
     {
-      this.title = title;
+      this.title = title ?? string.Empty;
       this.minValue = minValue;
       this.maxValue = Math.Max(minValue, maxValue);
       this.shiftStep = Math.Max(1, shiftStep);
@@ -55,7 +68,7 @@ namespace VacuumChamber
       this.summaryFormatter = summaryFormatter;
       this.onConfirm = onConfirm ?? throw new ArgumentNullException(nameof(onConfirm));
 
-      currentValue = Mathf.Clamp(initialValue, this.minValue, this.maxValue);
+      currentValue = Math.Clamp(initialValue, this.minValue, this.maxValue);
       editBuffer = currentValue.ToString();
 
       forcePause = true;
@@ -76,39 +89,40 @@ namespace VacuumChamber
       {
         Text.Font = GameFont.Medium;
         Text.Anchor = TextAnchor.UpperLeft;
-        Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 32f), title);
+        Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, TitleHeight), title);
 
         Text.Font = GameFont.Small;
         if (summaryFormatter != null)
         {
           GUI.color = ColoredText.SubtleGrayColor;
           Widgets.Label(
-            new Rect(inRect.x, inRect.y + 34f, inRect.width, 24f),
+            new Rect(inRect.x, inRect.y + SummaryOffsetY, inRect.width, SummaryHeight),
             summaryFormatter(GetEffectiveValue()));
           GUI.color = Color.white;
         }
 
-        float rowY = inRect.y + 68f;
-        float rowHeight = 34f;
-        float stepButtonWidth = 44f;
-        float gap = 8f;
-        float unitWidth = string.IsNullOrEmpty(unitSuffix) ? 0f : 32f;
-        float inputWidth = inRect.width - (stepButtonWidth * 2f) - (gap * 2f) - unitWidth;
+        float rowY = inRect.y + InputRowOffsetY;
+        float unitWidth = string.IsNullOrEmpty(unitSuffix) ? 0f : UnitLabelWidth;
+        float inputWidth = inRect.width - (StepButtonWidth * 2f) - (ControlGap * 2f) - unitWidth;
 
-        Rect minusRect = new Rect(inRect.x, rowY, stepButtonWidth, rowHeight);
-        Rect inputRect = new Rect(minusRect.xMax + gap, rowY, inputWidth, rowHeight);
-        Rect unitRect = new Rect(inputRect.xMax + 4f, rowY, Math.Max(0f, unitWidth - 4f), rowHeight);
-        Rect plusRect = new Rect(inRect.xMax - stepButtonWidth, rowY, stepButtonWidth, rowHeight);
+        Rect minusRect = new Rect(inRect.x, rowY, StepButtonWidth, RowHeight);
+        Rect inputRect = new Rect(minusRect.xMax + ControlGap, rowY, inputWidth, RowHeight);
+        Rect unitRect = new Rect(
+          inputRect.xMax + UnitLabelPadding,
+          rowY,
+          Math.Max(0f, unitWidth - UnitLabelPadding),
+          RowHeight);
+        Rect plusRect = new Rect(inRect.xMax - StepButtonWidth, rowY, StepButtonWidth, RowHeight);
 
-        int step = Event.current.shift ? shiftStep : 1;
+        int step = Event.current?.shift == true ? shiftStep : 1;
 
         if (Widgets.ButtonText(minusRect, "-"))
         {
           SoundDefOf.Click.PlayOneShotOnCamera();
-          SetValue(GetEffectiveValue() - step);
+          AdjustValue(-step);
         }
 
-        Widgets.TextFieldNumeric(inputRect, ref currentValue, ref editBuffer, minValue, maxValue);
+        DrawNumericInput(inputRect);
 
         if (!string.IsNullOrEmpty(unitSuffix))
         {
@@ -120,15 +134,12 @@ namespace VacuumChamber
         if (Widgets.ButtonText(plusRect, "+"))
         {
           SoundDefOf.Click.PlayOneShotOnCamera();
-          SetValue(GetEffectiveValue() + step);
+          AdjustValue(step);
         }
 
-        float buttonWidth = 110f;
-        float buttonHeight = 34f;
-        float footerY = inRect.yMax - buttonHeight;
-
-        Rect cancelRect = new Rect(inRect.x, footerY, buttonWidth, buttonHeight);
-        Rect confirmRect = new Rect(inRect.xMax - buttonWidth, footerY, buttonWidth, buttonHeight);
+        float footerY = inRect.yMax - RowHeight;
+        Rect cancelRect = new Rect(inRect.x, footerY, FooterButtonWidth, RowHeight);
+        Rect confirmRect = new Rect(inRect.xMax - FooterButtonWidth, footerY, FooterButtonWidth, RowHeight);
 
         if (Widgets.ButtonText(cancelRect, "VC_Dialog_Cancel".Translate()))
         {
@@ -153,23 +164,49 @@ namespace VacuumChamber
     public override void OnAcceptKeyPressed()
     {
       CommitAndClose();
-      Event.current.Use();
+      Event.current?.Use();
+    }
+
+    private void DrawNumericInput(Rect inputRect)
+    {
+      int valueCopy;
+      string bufferCopy;
+      lock (syncLock)
+      {
+        valueCopy = currentValue;
+        bufferCopy = editBuffer;
+      }
+
+      int originalValue = valueCopy;
+      string originalBuffer = bufferCopy;
+      Widgets.TextFieldNumeric(inputRect, ref valueCopy, ref bufferCopy, minValue, maxValue);
+
+      if (valueCopy != originalValue || !string.Equals(bufferCopy, originalBuffer, StringComparison.Ordinal))
+      {
+        lock (syncLock)
+        {
+          currentValue = valueCopy;
+          editBuffer = bufferCopy;
+        }
+      }
     }
 
     private int GetEffectiveValue()
     {
-      if (int.TryParse(editBuffer, out int parsed))
+      lock (syncLock)
       {
-        return Mathf.Clamp(parsed, minValue, maxValue);
+        return VacuumPhysics.ParseClampedInt(editBuffer, currentValue, minValue, maxValue);
       }
-
-      return Mathf.Clamp(currentValue, minValue, maxValue);
     }
 
-    private void SetValue(int newValue)
+    private void AdjustValue(int delta)
     {
-      currentValue = Mathf.Clamp(newValue, minValue, maxValue);
-      editBuffer = currentValue.ToString();
+      lock (syncLock)
+      {
+        int effective = VacuumPhysics.ParseClampedInt(editBuffer, currentValue, minValue, maxValue);
+        currentValue = Math.Clamp(effective + delta, minValue, maxValue);
+        editBuffer = currentValue.ToString();
+      }
     }
 
     private void CommitAndClose()

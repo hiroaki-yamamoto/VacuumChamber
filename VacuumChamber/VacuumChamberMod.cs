@@ -1,4 +1,3 @@
-using System.Reflection;
 using HarmonyLib;
 using Verse;
 
@@ -15,7 +14,7 @@ namespace VacuumChamber
     static VacuumChamberMod()
     {
       Harmony harmony = new Harmony(HarmonyId);
-      harmony.PatchAll(Assembly.GetExecutingAssembly());
+      harmony.PatchAll(typeof(VacuumChamberMod).Assembly);
     }
   }
 }

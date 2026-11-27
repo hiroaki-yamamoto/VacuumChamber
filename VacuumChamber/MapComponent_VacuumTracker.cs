@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Verse;
 
@@ -11,14 +10,16 @@ namespace VacuumChamber
   /// </summary>
   public class MapComponent_VacuumTracker : MapComponent
   {
+    private const int SweepIntervalTicks = 250;
+
     private static readonly ConditionalWeakTable<Map, MapComponent_VacuumTracker> MapTrackers =
       new ConditionalWeakTable<Map, MapComponent_VacuumTracker>();
 
     private readonly object syncLock = new object();
     private readonly HashSet<Room> trackedRooms = new HashSet<Room>();
-    private readonly List<Room> sweepScratch = new List<Room>();
 
     private volatile bool hasActiveVacuum;
+    private VacuumComponent? cachedVacuumComponent;
 
     // Save/load backing buffers for planetary room vacuum levels.
     private List<IntVec3> savedRoomCells = new List<IntVec3>();
@@ -31,8 +32,13 @@ namespace VacuumChamber
     public MapComponent_VacuumTracker(Map map)
       : base(map)
     {
-      MapTrackers.AddOrUpdate(map, this);
+      if (map != null)
+      {
+        MapTrackers.AddOrUpdate(map, this);
+      }
     }
+
+    private bool IsPlanetaryMap => map?.Biome is { inVacuum: false };
 
     /// <summary>
     /// Retrieves the <see cref="MapComponent_VacuumTracker"/> for <paramref name="map"/> in O(1) time.
@@ -78,11 +84,7 @@ namespace VacuumChamber
     /// <param name="room">Room to track.</param>
     public void RegisterRoom(Room? room)
     {
-      if (map == null
-        || map.Biome == null
-        || map.Biome.inVacuum
-        || !RoomSealUtility.IsRoomSealedIndoors(room)
-        || room == null)
+      if (!IsPlanetaryMap || !RoomSealUtility.IsRoomSealedIndoors(room) || room == null)
       {
         return;
       }
@@ -96,7 +98,7 @@ namespace VacuumChamber
 
       if (added)
       {
-        map.GetComponent<VacuumComponent>()?.Dirty();
+        DirtyVacuumComponent();
       }
     }
 
@@ -106,7 +108,7 @@ namespace VacuumChamber
     /// <param name="room">Room to remove from tracking.</param>
     public void UnregisterRoom(Room? room)
     {
-      if (room == null || map == null || map.Biome == null || map.Biome.inVacuum)
+      if (room == null || !IsPlanetaryMap)
       {
         return;
       }
@@ -120,7 +122,7 @@ namespace VacuumChamber
 
       if (removed)
       {
-        map.GetComponent<VacuumComponent>()?.Dirty();
+        DirtyVacuumComponent();
       }
     }
 
@@ -130,7 +132,7 @@ namespace VacuumChamber
     /// <param name="room">Room that lost its roof or enclosure.</param>
     public void NotifyRoomUnsealed(Room? room)
     {
-      if (room == null || map == null || map.Biome == null || map.Biome.inVacuum)
+      if (room == null || !IsPlanetaryMap)
       {
         return;
       }
@@ -148,16 +150,14 @@ namespace VacuumChamber
     {
       base.MapComponentTick();
 
-      if (map == null
-        || map.Biome == null
-        || map.Biome.inVacuum
+      if (!IsPlanetaryMap
         || !hasActiveVacuum
-        || !map.IsHashIntervalTick(250))
+        || !map.IsHashIntervalTick(SweepIntervalTicks))
       {
         return;
       }
 
-      bool changed = false;
+      List<Room>? removedRooms = null;
       lock (syncLock)
       {
         if (trackedRooms.Count == 0)
@@ -166,37 +166,45 @@ namespace VacuumChamber
           return;
         }
 
-        sweepScratch.Clear();
+        // Collect invalid rooms only when detected (zero allocations on steady-state sweeps).
         foreach (Room room in trackedRooms)
         {
           if (room.Dereferenced
             || !RoomSealUtility.IsRoomSealedIndoors(room)
             || RoomSealUtility.GetRawVacuum(room) <= 0f)
           {
-            sweepScratch.Add(room);
+            removedRooms ??= new List<Room>();
+            removedRooms.Add(room);
           }
         }
 
-        for (int i = 0; i < sweepScratch.Count; i++)
+        if (removedRooms != null)
         {
-          Room invalid = sweepScratch[i];
-          if (!invalid.Dereferenced && RoomSealUtility.GetRawVacuum(invalid) > 0f)
+          for (int i = 0; i < removedRooms.Count; i++)
           {
-            invalid.Vacuum = 0f;
+            trackedRooms.Remove(removedRooms[i]);
           }
 
-          trackedRooms.Remove(invalid);
-          changed = true;
+          hasActiveVacuum = trackedRooms.Count > 0;
         }
-
-        sweepScratch.Clear();
-        hasActiveVacuum = trackedRooms.Count > 0;
       }
 
-      if (changed)
+      if (removedRooms == null)
       {
-        map.GetComponent<VacuumComponent>()?.Dirty();
+        return;
       }
+
+      // Vent rooms and dirty RimWorld components strictly outside syncLock to avoid lock-order hazards.
+      for (int i = 0; i < removedRooms.Count; i++)
+      {
+        Room invalid = removedRooms[i];
+        if (!invalid.Dereferenced && RoomSealUtility.GetRawVacuum(invalid) > 0f)
+        {
+          invalid.Vacuum = 0f;
+        }
+      }
+
+      DirtyVacuumComponent();
     }
 
     /// <inheritdoc />
@@ -206,18 +214,22 @@ namespace VacuumChamber
 
       if (Scribe.mode == LoadSaveMode.Saving)
       {
-        savedRoomCells.Clear();
-        savedRoomVacuums.Clear();
-
-        if (map != null && map.Biome != null && !map.Biome.inVacuum)
+        lock (syncLock)
         {
-          lock (syncLock)
+          savedRoomCells.Clear();
+          savedRoomVacuums.Clear();
+
+          if (IsPlanetaryMap)
           {
             foreach (Room room in trackedRooms)
             {
-              if (room.Dereferenced
-                || !RoomSealUtility.IsRoomSealedIndoors(room)
-                || RoomSealUtility.GetRawVacuum(room) <= 0f)
+              if (room.Dereferenced || !RoomSealUtility.IsRoomSealedIndoors(room))
+              {
+                continue;
+              }
+
+              float rawVacuum = RoomSealUtility.GetRawVacuum(room);
+              if (rawVacuum <= 0f)
               {
                 continue;
               }
@@ -226,7 +238,7 @@ namespace VacuumChamber
               if (cellEnum.MoveNext())
               {
                 savedRoomCells.Add(cellEnum.Current);
-                savedRoomVacuums.Add(RoomSealUtility.GetRawVacuum(room));
+                savedRoomVacuums.Add(rawVacuum);
               }
             }
           }
@@ -238,8 +250,11 @@ namespace VacuumChamber
 
       if (Scribe.mode == LoadSaveMode.LoadingVars)
       {
-        savedRoomCells ??= new List<IntVec3>();
-        savedRoomVacuums ??= new List<float>();
+        lock (syncLock)
+        {
+          savedRoomCells ??= new List<IntVec3>();
+          savedRoomVacuums ??= new List<float>();
+        }
       }
     }
 
@@ -248,21 +263,34 @@ namespace VacuumChamber
     {
       base.FinalizeInit();
 
-      if (map == null || map.Biome == null || map.Biome.inVacuum)
+      if (!IsPlanetaryMap)
       {
+        ClearSavedBuffers();
         return;
       }
 
-      if (savedRoomCells.Count == 0 || savedRoomCells.Count != savedRoomVacuums.Count)
+      List<IntVec3> cellsToRestore;
+      List<float> vacuumsToRestore;
+      lock (syncLock)
       {
-        return;
+        if (savedRoomCells.Count == 0 || savedRoomCells.Count != savedRoomVacuums.Count)
+        {
+          savedRoomCells.Clear();
+          savedRoomVacuums.Clear();
+          return;
+        }
+
+        cellsToRestore = new List<IntVec3>(savedRoomCells);
+        vacuumsToRestore = new List<float>(savedRoomVacuums);
+        savedRoomCells.Clear();
+        savedRoomVacuums.Clear();
       }
 
-      for (int i = 0; i < savedRoomCells.Count; i++)
+      for (int i = 0; i < cellsToRestore.Count; i++)
       {
-        IntVec3 cell = savedRoomCells[i];
-        float vacuum = savedRoomVacuums[i];
-        if (!cell.InBounds(map) || vacuum <= 0f)
+        IntVec3 cell = cellsToRestore[i];
+        float vacuum = vacuumsToRestore[i];
+        if (!cell.InBounds(map) || !float.IsFinite(vacuum) || vacuum <= 0f)
         {
           continue;
         }
@@ -274,9 +302,6 @@ namespace VacuumChamber
           RegisterRoom(room);
         }
       }
-
-      savedRoomCells.Clear();
-      savedRoomVacuums.Clear();
     }
 
     /// <inheritdoc />
@@ -286,13 +311,41 @@ namespace VacuumChamber
       lock (syncLock)
       {
         trackedRooms.Clear();
+        savedRoomCells.Clear();
+        savedRoomVacuums.Clear();
         hasActiveVacuum = false;
       }
+
+      Volatile.Write(ref cachedVacuumComponent, null);
 
       if (map != null)
       {
         MapTrackers.Remove(map);
       }
+    }
+
+    private void ClearSavedBuffers()
+    {
+      lock (syncLock)
+      {
+        savedRoomCells.Clear();
+        savedRoomVacuums.Clear();
+      }
+    }
+
+    private void DirtyVacuumComponent()
+    {
+      VacuumComponent? vacuumComp = Volatile.Read(ref cachedVacuumComponent);
+      if (vacuumComp == null && map != null)
+      {
+        VacuumComponent? resolved = map.GetComponent<VacuumComponent>();
+        if (resolved != null)
+        {
+          vacuumComp = Interlocked.CompareExchange(ref cachedVacuumComponent, resolved, null) ?? resolved;
+        }
+      }
+
+      vacuumComp?.Dirty();
     }
   }
 }

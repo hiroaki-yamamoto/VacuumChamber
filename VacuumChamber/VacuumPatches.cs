@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
@@ -32,7 +31,7 @@ namespace VacuumChamber
     /// <returns><c>true</c> when vacuum mechanics are active on <paramref name="map"/>.</returns>
     public static bool IsVacuumActiveOnMap(Map? map)
     {
-      if (map == null || map.Biome == null)
+      if (map?.Biome == null)
       {
         return false;
       }
@@ -40,35 +39,64 @@ namespace VacuumChamber
       return map.Biome.inVacuum || MapComponent_VacuumTracker.HasActiveVacuumOnMap(map);
     }
 
+    /// <summary>
+    /// Streaming single-instruction lookahead transpiler that rewrites <c>Map.Biome.inVacuum</c>
+    /// into <see cref="IsVacuumActiveOnMap(Map?)"/> in O(N) time and O(1) auxiliary space.
+    /// </summary>
     private static IEnumerable<CodeInstruction> ReplaceBiomeInVacuumCheck(
       IEnumerable<CodeInstruction> instructions,
       MethodBase original)
     {
-      List<CodeInstruction> list = new List<CodeInstruction>(instructions);
+      using IEnumerator<CodeInstruction> enumerator = instructions.GetEnumerator();
+      if (!enumerator.MoveNext())
+      {
+        LogMissingBiomeCheck(original);
+        yield break;
+      }
+
+      CodeInstruction previous = enumerator.Current;
+      bool hasPending = true;
       int replacements = 0;
 
-      for (int i = 0; i < list.Count; i++)
+      while (enumerator.MoveNext())
       {
-        if (i + 1 < list.Count
-          && list[i].Calls(MapGetBiomeMethod)
-          && list[i + 1].LoadsField(BiomeInVacuumField))
+        CodeInstruction current = enumerator.Current;
+        if (hasPending
+          && previous.Calls(MapGetBiomeMethod)
+          && current.LoadsField(BiomeInVacuumField))
         {
           CodeInstruction call = new CodeInstruction(OpCodes.Call, IsVacuumActiveOnMapMethod);
-          call.labels.AddRange(list[i].labels);
-          call.blocks.AddRange(list[i].blocks);
+          call.labels.AddRange(previous.labels);
+          call.blocks.AddRange(previous.blocks);
           yield return call;
-          i++;
           replacements++;
+          hasPending = false;
           continue;
         }
 
-        yield return list[i];
+        if (hasPending)
+        {
+          yield return previous;
+        }
+
+        previous = current;
+        hasPending = true;
+      }
+
+      if (hasPending)
+      {
+        yield return previous;
       }
 
       if (replacements == 0)
       {
-        Log.Warning($"[VacuumChamber] Expected Map.Biome.inVacuum check not found in {original.DeclaringType?.FullName}.{original.Name}.");
+        LogMissingBiomeCheck(original);
       }
+    }
+
+    private static void LogMissingBiomeCheck(MethodBase original)
+    {
+      Log.Warning($"[VacuumChamber] Expected Map.Biome.inVacuum check not found in {original.DeclaringType?.FullName}.{original.Name}.");
     }
 
     [HarmonyTranspiler]
@@ -125,7 +153,7 @@ namespace VacuumChamber
       }
 
       Map? map = __instance.map;
-      if (map != null && map.Biome != null && !map.Biome.inVacuum)
+      if (map?.Biome is { inVacuum: false })
       {
         __result = MapComponent_VacuumTracker.HasActiveVacuumOnMap(map);
       }
@@ -141,8 +169,7 @@ namespace VacuumChamber
       }
 
       Map? map = __instance.Map;
-      if (map == null
-        || map.Biome == null
+      if (map?.Biome == null
         || map.Biome.inVacuum
         || !MapComponent_VacuumTracker.HasActiveVacuumOnMap(map))
       {
@@ -158,26 +185,7 @@ namespace VacuumChamber
 
       if (__instance.IsDoorway && map.regionAndRoomUpdater.Enabled)
       {
-        float sum = 0f;
-        int adjacentCount = 0;
-        List<Region> regions = __instance.Regions;
-        for (int i = 0; i < regions.Count; i++)
-        {
-          Region region = regions[i];
-          List<RegionLink> links = region.links;
-          for (int j = 0; j < links.Count; j++)
-          {
-            Region? other = links[j].GetOtherRegion(region);
-            Room? otherRoom = other?.Room;
-            if (otherRoom != null && otherRoom != __instance)
-            {
-              sum += RoomSealUtility.GetRawVacuum(otherRoom);
-              adjacentCount++;
-            }
-          }
-        }
-
-        float average = adjacentCount > 0 ? sum / adjacentCount : 0f;
+        float average = ComputeDoorwayAverageVacuum(__instance);
         __result = average <= Room.MinVaccum ? 0f : average;
         return;
       }
@@ -194,21 +202,14 @@ namespace VacuumChamber
     [HarmonyPatch(typeof(Room), nameof(Room.Notify_RoofChanged))]
     private static void Room_Notify_RoofChanged_Postfix(Room __instance)
     {
-      if (__instance.Dereferenced || __instance.Map == null)
+      Map? map = __instance.Map;
+      if (__instance.Dereferenced || map == null)
       {
         return;
       }
 
-      Map map = __instance.Map;
-      if (map.Biome != null && !map.Biome.inVacuum && !RoomSealUtility.IsRoomSealedIndoors(__instance))
-      {
-        MapComponent_VacuumTracker.GetTracker(map)?.NotifyRoomUnsealed(__instance);
-      }
-
-      foreach (Building_VacuumChamber chamber in __instance.ContainedThings<Building_VacuumChamber>())
-      {
-        chamber.ChamberComp?.RefreshState();
-      }
+      NotifyPlanetaryRoomIfUnsealed(__instance, map);
+      RefreshChambersOnMap(map);
     }
 
     [HarmonyPostfix]
@@ -221,21 +222,58 @@ namespace VacuumChamber
         return;
       }
 
-      if (!__instance.Dereferenced
-        && map.Biome != null
-        && !map.Biome.inVacuum
-        && !RoomSealUtility.IsRoomSealedIndoors(__instance))
+      if (!__instance.Dereferenced)
       {
-        MapComponent_VacuumTracker.GetTracker(map)?.NotifyRoomUnsealed(__instance);
+        NotifyPlanetaryRoomIfUnsealed(__instance, map);
       }
 
-      if (map.listerThings == null)
+      RefreshChambersOnMap(map);
+    }
+
+    private static float ComputeDoorwayAverageVacuum(Room doorway)
+    {
+      float sum = 0f;
+      int adjacentCount = 0;
+      List<Region> regions = doorway.Regions;
+      for (int i = 0; i < regions.Count; i++)
       {
-        return;
+        Region region = regions[i];
+        List<RegionLink> links = region.links;
+        for (int j = 0; j < links.Count; j++)
+        {
+          Region? other = links[j].GetOtherRegion(region);
+          Room? otherRoom = other?.Room;
+          if (otherRoom != null && otherRoom != doorway)
+          {
+            if (RoomSealUtility.IsRoomSealedIndoors(otherRoom))
+            {
+              sum += RoomSealUtility.GetRawVacuum(otherRoom);
+            }
+
+            adjacentCount++;
+          }
+        }
       }
 
-      ThingDef? chamberDef = DefDatabase<ThingDef>.GetNamedSilentFail("VC_VacuumChamber");
-      if (chamberDef == null)
+      return adjacentCount > 0 ? sum / adjacentCount : 0f;
+    }
+
+    private static void NotifyPlanetaryRoomIfUnsealed(Room room, Map map)
+    {
+      if (map.Biome is { inVacuum: false } && !RoomSealUtility.IsRoomSealedIndoors(room))
+      {
+        MapComponent_VacuumTracker.GetTracker(map)?.NotifyRoomUnsealed(room);
+      }
+    }
+
+    /// <summary>
+    /// Refreshes all Vacuum Chambers on <paramref name="map"/> in O(C) time with zero allocations,
+    /// avoiding O(T_room) room-contents enumeration and runtime <see cref="DefDatabase{T}"/> lookups.
+    /// </summary>
+    private static void RefreshChambersOnMap(Map map)
+    {
+      ThingDef? chamberDef = VacuumChamberDefOf.VC_VacuumChamber;
+      if (chamberDef == null || map.listerThings == null)
       {
         return;
       }

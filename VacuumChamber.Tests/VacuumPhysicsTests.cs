@@ -1,7 +1,4 @@
-using System;
-using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using VacuumChamber;
 
 namespace VacuumChamber.Tests;
 
@@ -25,6 +22,8 @@ public class VacuumPhysicsTests
     AssertClose(VacuumPhysics.ComputeRoomVolumeM3(1), 2.5, 1e-9, "1 tile * 2.5 m = 2.5 m³");
     AssertClose(VacuumPhysics.ComputeRoomVolumeM3(0), 0.0, 1e-9, "0 tiles = 0 m³");
     AssertClose(VacuumPhysics.ComputeRoomVolumeM3(-5), 0.0, 1e-9, "negative tiles = 0 m³");
+    AssertClose(VacuumPhysics.ComputeRoomVolumeM3(20, double.NaN), 0.0, 1e-9, "NaN ceiling height = 0 m³");
+    AssertClose(VacuumPhysics.ComputeRoomVolumeM3(20, double.PositiveInfinity), 0.0, 1e-9, "Inf ceiling height = 0 m³");
   }
 
   [TestMethod]
@@ -32,9 +31,11 @@ public class VacuumPhysicsTests
   {
     AssertClose(VacuumPhysics.ComputePumpingSpeedM3PerHour(1), 100.0, 1e-9, "Lv 1 = 100 m³/h");
     AssertClose(VacuumPhysics.ComputePumpingSpeedM3PerHour(50), 5000.0, 1e-9, "Lv 50 = 5000 m³/h");
+    AssertClose(VacuumPhysics.ComputePumpingSpeedM3PerHour(5, double.NaN), 0.0, 1e-9, "NaN speedPerLevel = 0 m³/h");
     AssertClose(VacuumPhysics.ComputePowerDrawWatts(1), 250.0, 1e-6, "Lv 1 = 250 W");
     AssertClose(VacuumPhysics.ComputePowerDrawWatts(50), 12500.0, 1e-6, "Lv 50 = 12500 W");
     AssertClose(VacuumPhysics.ComputePowerDrawWatts(0), 0.0, 1e-6, "Lv 0 = 0 W");
+    AssertClose(VacuumPhysics.ComputePowerDrawWatts(5, double.PositiveInfinity), 0.0, 1e-6, "Inf powerPerLevel = 0 W");
   }
 
   [TestMethod]
@@ -49,6 +50,28 @@ public class VacuumPhysicsTests
     Assert.AreEqual(1, VacuumPhysics.ClampPumpingSpeedLevel(1), "Clamp speed 1 -> 1");
     Assert.AreEqual(50, VacuumPhysics.ClampPumpingSpeedLevel(50), "Clamp speed 50 -> 50");
     Assert.AreEqual(50, VacuumPhysics.ClampPumpingSpeedLevel(99), "Clamp speed > 50 -> 50");
+  }
+
+  [TestMethod]
+  public void TestParseClampedInt()
+  {
+    Assert.AreEqual(42, VacuumPhysics.ParseClampedInt("42", 10, 0, 100), "Valid integer in range");
+    Assert.AreEqual(0, VacuumPhysics.ParseClampedInt("-25", 10, 0, 100), "Below min clamps to min");
+    Assert.AreEqual(100, VacuumPhysics.ParseClampedInt("250", 10, 0, 100), "Above max clamps to max");
+    Assert.AreEqual(10, VacuumPhysics.ParseClampedInt("abc", 10, 0, 100), "Invalid text uses fallback");
+    Assert.AreEqual(50, VacuumPhysics.ParseClampedInt(null, 99, 1, 50), "Null text clamps fallback to max");
+    Assert.AreEqual(1, VacuumPhysics.ParseClampedInt("", -5, 1, 50), "Empty text clamps fallback to min");
+    Assert.AreEqual(5, VacuumPhysics.ParseClampedInt("10", 10, 5, 2), "Inverted bounds clamp to minValue");
+  }
+
+  [TestMethod]
+  public void TestIsPressurizing()
+  {
+    Assert.IsTrue(VacuumPhysics.IsPressurizing(0.8f, 0.5f), "Current > target -> pressurizing");
+    Assert.IsFalse(VacuumPhysics.IsPressurizing(0.5f, 0.5f), "Current == target -> not pressurizing");
+    Assert.IsFalse(VacuumPhysics.IsPressurizing(0.2f, 0.5f), "Current < target -> depressurizing");
+    Assert.IsFalse(VacuumPhysics.IsPressurizing(float.NaN, 0.5f), "NaN current -> not pressurizing");
+    Assert.IsFalse(VacuumPhysics.IsPressurizing(0.8f, float.NaN), "NaN target -> not pressurizing");
   }
 
   [TestMethod]
@@ -124,6 +147,20 @@ public class VacuumPhysicsTests
 
     float atTarget = VacuumPhysics.ComputeNextVacuum(0.50f, 0.50f, roomCellCount: 20, pumpingSpeedLevel: 1);
     AssertClose(atTarget, 0.50f, 1e-6, "No change when currentVacuum == targetVacuum");
+  }
+
+  [TestMethod]
+  public void TestNonFiniteAndExtremeInputs()
+  {
+    Assert.AreEqual(0f, VacuumPhysics.ComputeNextVacuum(float.NaN, 1f, 20, 1), "NaN currentVacuum returns 0");
+    Assert.AreEqual(0.5f, VacuumPhysics.ComputeNextVacuum(0.5f, float.NaN, 20, 1), "NaN targetVacuum preserves clamped current");
+    Assert.AreEqual(0.3f, VacuumPhysics.ComputeNextVacuum(0.3f, 1f, 20, 1, deltaHours: float.NaN), "NaN deltaHours makes no change");
+    Assert.AreEqual(0.3f, VacuumPhysics.ComputeNextVacuum(0.3f, 1f, 20, 1, ceilingHeightMeters: float.PositiveInfinity), "Inf ceilingHeight makes no change");
+    Assert.AreEqual(0.3f, VacuumPhysics.ComputeNextVacuum(0.3f, 1f, 20, 1, speedPerLevel: float.NegativeInfinity), "-Inf speedPerLevel makes no change");
+
+    // Extreme decay underflow: 1-tile room (2.5 m³), Lv 50 (5000 m³/h), dt = 10 h -> exp(-20000) == 0
+    Assert.AreEqual(0.75f, VacuumPhysics.ComputeNextVacuum(0f, 0.75f, 1, 50, deltaHours: 10f), "Extreme depressurization clamps to target");
+    Assert.AreEqual(0.25f, VacuumPhysics.ComputeNextVacuum(1f, 0.25f, 1, 50, deltaHours: 10f), "Extreme pressurization clamps to target");
   }
 
   [TestMethod]
@@ -205,16 +242,21 @@ public class VacuumPhysicsTests
   {
     double expectedDep = 1.0 - Math.Exp(-0.2);
     double expectedPress = Math.Exp(-0.2);
-    bool allValid = true;
+    int failures = 0;
     Parallel.For(0, 10000, i =>
     {
       float rDep = VacuumPhysics.ComputeNextVacuum(0f, 1f, 20, 1);
       float rPress = VacuumPhysics.ComputeNextVacuum(1f, 0f, 20, 1);
-      if (Math.Abs(rDep - expectedDep) > 1e-5 || Math.Abs(rPress - expectedPress) > 1e-5)
+      int parsed = VacuumPhysics.ParseClampedInt("42", 0, 0, 100);
+      bool pressurizing = VacuumPhysics.IsPressurizing(0.8f, 0.2f);
+      if (Math.Abs(rDep - expectedDep) > 1e-5
+        || Math.Abs(rPress - expectedPress) > 1e-5
+        || parsed != 42
+        || !pressurizing)
       {
-        allValid = false;
+        Interlocked.Increment(ref failures);
       }
     });
-    Assert.IsTrue(allValid, "10,000 concurrent depressurization & pressurization calls produce deterministic results");
+    Assert.AreEqual(0, failures, "10,000 concurrent calls produce deterministic results");
   }
 }

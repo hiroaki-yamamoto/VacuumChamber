@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Text;
 using RimWorld;
 using Verse;
@@ -13,48 +12,44 @@ namespace VacuumChamber
   {
     private const int TargetVacuumGizmoGroupKey = 918273641;
     private const int PumpingSpeedGizmoGroupKey = 918273642;
+    private const float RareTickDeltaHours = (float)GenTicks.TickRareInterval / GenDate.TicksPerHour;
+    private const int InspectStringInitialCapacity = 192;
 
     private int targetVacuumPercent = VacuumPhysics.MinVacuumPercent;
     private int pumpingSpeedLevel = VacuumPhysics.MinPumpingSpeedLevel;
-    private ChamberState currentState = ChamberState.Unpowered;
+    private int currentState = (int)ChamberState.Unpowered;
     private CompPowerTrader? powerComp;
 
     /// <summary>Gets the XML configuration properties for this chamber.</summary>
     public CompProperties_VacuumChamber Props => (CompProperties_VacuumChamber)props;
 
     /// <summary>Gets the current evaluated operating state.</summary>
-    public ChamberState CurrentState => currentState;
+    public ChamberState CurrentState => (ChamberState)Volatile.Read(ref currentState);
 
     /// <summary>Gets the configured target vacuum percentage in [0, 100].</summary>
-    public int TargetVacuumPercent => targetVacuumPercent;
+    public int TargetVacuumPercent => Volatile.Read(ref targetVacuumPercent);
 
     /// <summary>Gets the configured pumping speed level in [1, maxPumpingSpeedLevel].</summary>
-    public int PumpingSpeedLevel => pumpingSpeedLevel;
+    public int PumpingSpeedLevel => Volatile.Read(ref pumpingSpeedLevel);
 
     /// <summary>Gets the target vacuum as a normalized fraction in [0.0, 1.0].</summary>
-    public float TargetVacuumFraction => targetVacuumPercent / 100f;
+    public float TargetVacuumFraction => TargetVacuumPercent / 100f;
 
     /// <inheritdoc />
     public override void PostSpawnSetup(bool respawningAfterLoad)
     {
       base.PostSpawnSetup(respawningAfterLoad);
 
-      if (!respawningAfterLoad && Scribe.mode == LoadSaveMode.Inactive)
-      {
-        targetVacuumPercent = VacuumPhysics.ClampTargetVacuumPercent(Props.defaultTargetVacuum);
-        pumpingSpeedLevel = VacuumPhysics.ClampPumpingSpeedLevel(
-          Props.defaultPumpingSpeedLevel,
-          Props.maxPumpingSpeedLevel);
-      }
-      else
-      {
-        targetVacuumPercent = VacuumPhysics.ClampTargetVacuumPercent(targetVacuumPercent);
-        pumpingSpeedLevel = VacuumPhysics.ClampPumpingSpeedLevel(
-          pumpingSpeedLevel,
-          Props.maxPumpingSpeedLevel);
-      }
+      bool isFreshPlacement = !respawningAfterLoad && Scribe.mode == LoadSaveMode.Inactive;
+      int rawTarget = isFreshPlacement ? Props.defaultTargetVacuum : Volatile.Read(ref targetVacuumPercent);
+      int rawSpeed = isFreshPlacement ? Props.defaultPumpingSpeedLevel : Volatile.Read(ref pumpingSpeedLevel);
 
-      powerComp = parent.GetComp<CompPowerTrader>();
+      Volatile.Write(ref targetVacuumPercent, VacuumPhysics.ClampTargetVacuumPercent(rawTarget));
+      Volatile.Write(
+        ref pumpingSpeedLevel,
+        VacuumPhysics.ClampPumpingSpeedLevel(rawSpeed, Props.maxPumpingSpeedLevel));
+
+      ResolvePowerComp();
       UpdatePowerConsumption();
       RefreshState(forceDirtyMesh: false);
     }
@@ -64,11 +59,7 @@ namespace VacuumChamber
     {
       base.ReceiveCompSignal(signal);
 
-      if (signal == CompPowerTrader.PowerTurnedOnSignal
-        || signal == CompPowerTrader.PowerTurnedOffSignal
-        || signal == CompFlickable.FlickedOnSignal
-        || signal == CompFlickable.FlickedOffSignal
-        || signal == CompBreakdownable.BreakdownSignal)
+      if (IsPowerOrStatusSignal(signal))
       {
         UpdatePowerConsumption();
         RefreshState();
@@ -81,14 +72,9 @@ namespace VacuumChamber
       base.CompTickRare();
 
       UpdatePowerConsumption();
-      RefreshState();
+      ChamberState state = RefreshStateCore(forceDirtyMesh: false, out Room? room);
 
-      if (currentState != ChamberState.Operational || !parent.Spawned || parent.Map == null)
-      {
-        return;
-      }
-
-      if (!RoomSealUtility.IsCellSealedIndoors(parent.Position, parent.Map, out Room? room) || room == null)
+      if (state != ChamberState.Operational || room == null || !parent.Spawned || parent.Map == null)
       {
         return;
       }
@@ -104,18 +90,19 @@ namespace VacuumChamber
         tracker?.RegisterRoom(room);
       }
 
-      if (currentVacuum == TargetVacuumFraction)
+      float targetFraction = TargetVacuumFraction;
+      if (currentVacuum == targetFraction)
       {
         return;
       }
 
-      float deltaHours = (float)GenTicks.TickRareInterval / GenDate.TicksPerHour;
+      int speedLevel = PumpingSpeedLevel;
       float nextVacuum = VacuumPhysics.ComputeNextVacuum(
         currentVacuum,
-        TargetVacuumFraction,
+        targetFraction,
         room.CellCount,
-        pumpingSpeedLevel,
-        deltaHours,
+        speedLevel,
+        RareTickDeltaHours,
         Props.ceilingHeightMeters,
         Props.pumpingSpeedPerLevel);
 
@@ -140,25 +127,7 @@ namespace VacuumChamber
     /// <param name="forceDirtyMesh">If <c>true</c>, forces a map mesh rebuild even if the state is unchanged.</param>
     public void RefreshState(bool forceDirtyMesh = false)
     {
-      if (powerComp == null && parent != null)
-      {
-        powerComp = parent.GetComp<CompPowerTrader>();
-      }
-
-      bool isPowered = powerComp != null && powerComp.PowerOn;
-      bool isSealedIndoors = parent != null
-        && parent.Spawned
-        && RoomSealUtility.IsCellSealedIndoors(parent.Position, parent.Map, out _);
-
-      ChamberState nextState = VacuumPhysics.EvaluateState(isPowered, isSealedIndoors);
-      if (nextState != currentState || forceDirtyMesh)
-      {
-        currentState = nextState;
-        if (parent != null && parent.Spawned && parent.Map != null)
-        {
-          parent.DirtyMapMesh(parent.Map);
-        }
-      }
+      RefreshStateCore(forceDirtyMesh, out _);
     }
 
     /// <summary>
@@ -166,16 +135,19 @@ namespace VacuumChamber
     /// </summary>
     public void UpdatePowerConsumption()
     {
-      if (powerComp == null && parent != null)
+      CompPowerTrader? power = ResolvePowerComp();
+      if (power == null)
       {
-        powerComp = parent.GetComp<CompPowerTrader>();
+        return;
       }
 
-      if (powerComp != null)
+      float desiredOutput = -VacuumPhysics.ComputePowerDrawWatts(
+        PumpingSpeedLevel,
+        Props.powerPerSpeedLevel);
+
+      if (power.PowerOutput != desiredOutput)
       {
-        powerComp.PowerOutput = -VacuumPhysics.ComputePowerDrawWatts(
-          pumpingSpeedLevel,
-          Props.powerPerSpeedLevel);
+        power.PowerOutput = desiredOutput;
       }
     }
 
@@ -192,22 +164,28 @@ namespace VacuumChamber
         yield break;
       }
 
+      int targetPercent = TargetVacuumPercent;
+      int speedLevel = PumpingSpeedLevel;
+
       yield return new Command_Action
       {
-        defaultLabel = "VC_SetVacuumLevel_Label".Translate(targetVacuumPercent),
+        defaultLabel = "VC_SetVacuumLevel_Label".Translate(targetPercent),
         defaultDesc = "VC_SetVacuumLevel_Desc".Translate(),
         icon = ChamberTextures.SetVacuumLevelIcon,
         groupKey = TargetVacuumGizmoGroupKey,
         action = OpenTargetVacuumDialog,
       };
 
-      string speedLabelKey = IsPressurizationMode(out _)
+      bool isPressurizing = TryGetSealedRoomVacuum(out _, out float rawVacuum)
+        && VacuumPhysics.IsPressurizing(rawVacuum, targetPercent / 100f);
+
+      string speedLabelKey = isPressurizing
         ? "VC_SetPressurizationSpeed_Label"
         : "VC_SetPumpingSpeed_Label";
 
       yield return new Command_Action
       {
-        defaultLabel = speedLabelKey.Translate(pumpingSpeedLevel),
+        defaultLabel = speedLabelKey.Translate(speedLevel),
         defaultDesc = "VC_SetPumpingSpeed_Desc".Translate(),
         icon = ChamberTextures.SetPumpingSpeedIcon,
         groupKey = PumpingSpeedGizmoGroupKey,
@@ -218,9 +196,11 @@ namespace VacuumChamber
     /// <inheritdoc />
     public override string CompInspectStringExtra()
     {
-      StringBuilder sb = new StringBuilder();
+      StringBuilder sb = new StringBuilder(InspectStringInitialCapacity);
+      int targetPercent = TargetVacuumPercent;
+      int speedLevel = PumpingSpeedLevel;
 
-      string stateKey = currentState switch
+      string stateKey = CurrentState switch
       {
         ChamberState.Operational => "VC_State_Operational",
         ChamberState.Inoperable => "VC_State_Inoperable",
@@ -229,15 +209,18 @@ namespace VacuumChamber
       sb.Append(stateKey.Translate());
 
       sb.AppendLine();
-      sb.Append("VC_Inspect_TargetVacuum".Translate(targetVacuumPercent));
+      sb.Append("VC_Inspect_TargetVacuum".Translate(targetPercent));
 
       sb.AppendLine();
-      bool isPressurizing = IsPressurizationMode(out Room? room);
-      if (room != null)
+      bool hasSealedRoom = TryGetSealedRoomVacuum(out Room? room, out float rawVacuum);
+      bool isPressurizing = hasSealedRoom
+        && VacuumPhysics.IsPressurizing(rawVacuum, targetPercent / 100f);
+
+      if (hasSealedRoom && room != null)
       {
         double volumeM3 = VacuumPhysics.ComputeRoomVolumeM3(room.CellCount, Props.ceilingHeightMeters);
         sb.Append("VC_Inspect_RoomVacuum".Translate(
-          (RoomSealUtility.GetRawVacuum(room) * 100f).ToString("F1"),
+          (rawVacuum * 100f).ToString("F1"),
           volumeM3.ToString("F1")));
       }
       else
@@ -247,16 +230,16 @@ namespace VacuumChamber
 
       sb.AppendLine();
       double speedM3H = VacuumPhysics.ComputePumpingSpeedM3PerHour(
-        pumpingSpeedLevel,
+        speedLevel,
         Props.pumpingSpeedPerLevel);
       float watts = VacuumPhysics.ComputePowerDrawWatts(
-        pumpingSpeedLevel,
+        speedLevel,
         Props.powerPerSpeedLevel);
       string speedInspectKey = isPressurizing
         ? "VC_Inspect_PressurizationSpeed"
         : "VC_Inspect_PumpingSpeed";
       sb.Append(speedInspectKey.Translate(
-        pumpingSpeedLevel,
+        speedLevel,
         speedM3H.ToString("F0"),
         watts.ToString("F0")));
 
@@ -272,18 +255,89 @@ namespace VacuumChamber
 
       if (Scribe.mode == LoadSaveMode.PostLoadInit)
       {
-        targetVacuumPercent = VacuumPhysics.ClampTargetVacuumPercent(targetVacuumPercent);
-        pumpingSpeedLevel = VacuumPhysics.ClampPumpingSpeedLevel(
-          pumpingSpeedLevel,
-          Props.maxPumpingSpeedLevel);
+        Volatile.Write(
+          ref targetVacuumPercent,
+          VacuumPhysics.ClampTargetVacuumPercent(targetVacuumPercent));
+        Volatile.Write(
+          ref pumpingSpeedLevel,
+          VacuumPhysics.ClampPumpingSpeedLevel(pumpingSpeedLevel, Props.maxPumpingSpeedLevel));
       }
+    }
+
+    private ChamberState RefreshStateCore(bool forceDirtyMesh, out Room? sealedRoom)
+    {
+      sealedRoom = null;
+      CompPowerTrader? power = ResolvePowerComp();
+      bool isPowered = power != null && power.PowerOn;
+      bool isSealedIndoors = parent != null
+        && parent.Spawned
+        && RoomSealUtility.IsCellSealedIndoors(parent.Position, parent.Map, out sealedRoom);
+
+      if (!isSealedIndoors)
+      {
+        sealedRoom = null;
+      }
+
+      ChamberState nextState = VacuumPhysics.EvaluateState(isPowered, isSealedIndoors);
+      int previousState = Interlocked.Exchange(ref currentState, (int)nextState);
+      if (previousState != (int)nextState || forceDirtyMesh)
+      {
+        if (parent != null && parent.Spawned && parent.Map != null)
+        {
+          parent.DirtyMapMesh(parent.Map);
+        }
+      }
+
+      return nextState;
+    }
+
+    private CompPowerTrader? ResolvePowerComp()
+    {
+      CompPowerTrader? existing = Volatile.Read(ref powerComp);
+      if (existing != null || parent == null)
+      {
+        return existing;
+      }
+
+      CompPowerTrader? resolved = parent.GetComp<CompPowerTrader>();
+      if (resolved == null)
+      {
+        return null;
+      }
+
+      return Interlocked.CompareExchange(ref powerComp, resolved, null) ?? resolved;
+    }
+
+    private bool TryGetSealedRoomVacuum(out Room? sealedRoom, out float rawVacuum)
+    {
+      if (parent != null
+        && parent.Spawned
+        && RoomSealUtility.IsCellSealedIndoors(parent.Position, parent.Map, out sealedRoom)
+        && sealedRoom != null)
+      {
+        rawVacuum = RoomSealUtility.GetRawVacuum(sealedRoom);
+        return true;
+      }
+
+      sealedRoom = null;
+      rawVacuum = 0f;
+      return false;
+    }
+
+    private static bool IsPowerOrStatusSignal(string signal)
+    {
+      return signal == CompPowerTrader.PowerTurnedOnSignal
+        || signal == CompPowerTrader.PowerTurnedOffSignal
+        || signal == CompFlickable.FlickedOnSignal
+        || signal == CompFlickable.FlickedOffSignal
+        || signal == CompBreakdownable.BreakdownSignal;
     }
 
     private void OpenTargetVacuumDialog()
     {
       Find.WindowStack.Add(new Dialog_ChamberValue(
         "VC_Dialog_TargetVacuumTitle".Translate(),
-        targetVacuumPercent,
+        TargetVacuumPercent,
         VacuumPhysics.MinVacuumPercent,
         VacuumPhysics.MaxVacuumPercent,
         shiftStep: 10,
@@ -291,33 +345,24 @@ namespace VacuumChamber
         summaryFormatter: value => "VC_Dialog_TargetSummary".Translate(value),
         onConfirm: value =>
         {
-          targetVacuumPercent = VacuumPhysics.ClampTargetVacuumPercent(value);
+          Volatile.Write(
+            ref targetVacuumPercent,
+            VacuumPhysics.ClampTargetVacuumPercent(value));
         }));
-    }
-
-    private bool IsPressurizationMode(out Room? sealedRoom)
-    {
-      if (parent != null
-        && parent.Spawned
-        && RoomSealUtility.IsCellSealedIndoors(parent.Position, parent.Map, out sealedRoom)
-        && sealedRoom != null)
-      {
-        return RoomSealUtility.GetRawVacuum(sealedRoom) > TargetVacuumFraction;
-      }
-
-      sealedRoom = null;
-      return false;
     }
 
     private void OpenPumpingSpeedDialog()
     {
-      string titleKey = IsPressurizationMode(out _)
+      bool isPressurizing = TryGetSealedRoomVacuum(out _, out float rawVacuum)
+        && VacuumPhysics.IsPressurizing(rawVacuum, TargetVacuumFraction);
+
+      string titleKey = isPressurizing
         ? "VC_Dialog_PressurizationSpeedTitle"
         : "VC_Dialog_PumpingSpeedTitle";
 
       Find.WindowStack.Add(new Dialog_ChamberValue(
         titleKey.Translate(),
-        pumpingSpeedLevel,
+        PumpingSpeedLevel,
         VacuumPhysics.MinPumpingSpeedLevel,
         Props.maxPumpingSpeedLevel,
         shiftStep: 5,
@@ -330,7 +375,9 @@ namespace VacuumChamber
         },
         onConfirm: level =>
         {
-          pumpingSpeedLevel = VacuumPhysics.ClampPumpingSpeedLevel(level, Props.maxPumpingSpeedLevel);
+          Volatile.Write(
+            ref pumpingSpeedLevel,
+            VacuumPhysics.ClampPumpingSpeedLevel(level, Props.maxPumpingSpeedLevel));
           UpdatePowerConsumption();
         }));
     }
